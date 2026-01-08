@@ -2,16 +2,17 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# 1. Konfigurasi Utama & Ngrok
-NGROK_URL = "https://ae9d063e3834.ngrok-free.app" 
+# 1. Konfigurasi Utama
+# GANTI URL INI sesuai URL Ngrok terbaru Anda
+NGROK_URL = "hhttps://4d9ba8690bb9.ngrok-free.app" 
 
 st.set_page_config(
-    page_title="Monitoring Jalan Rusak v2",
+    page_title="Monitoring Jalan Rusak Final",
     page_icon="🚧",
     layout="wide"
 )
 
-# 2. Custom CSS
+# 2. Custom CSS (Gaya Gelap)
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -21,8 +22,6 @@ st.markdown("""
         padding: 20px;
         border-radius: 12px;
     }
-    div[data-testid="stMetricLabel"] { color: #9ca3af !important; font-weight: bold; }
-    div[data-testid="stMetricValue"] { color: #ffffff !important; }
     h1, h2, h3 { color: #ffffff; }
     </style>
     """, unsafe_allow_html=True)
@@ -30,33 +29,37 @@ st.markdown("""
 # 3. Sidebar
 with st.sidebar:
     st.title("⚙️ Kontrol Panel")
-    st.info("Sistem Monitoring Open-Vocabulary")
-    st.markdown(f"**Server Model:** `{NGROK_URL}`")
-    st.warning("⚠️ Buka URL Ngrok di atas dan klik 'Visit Site' jika gambar tidak muncul.")
+    st.markdown(f"**Model:** `Fine-tuned CLIP` ✅")
+    st.markdown(f"**Server:** `{NGROK_URL}`")
     if st.button("🔄 Segarkan Data"):
         st.cache_data.clear()
         st.rerun()
 
-# 4. Fungsi Load Data
+# 4. Fungsi Load Data (Disesuaikan dengan format app.py final)
 @st.cache_data(ttl=60)
 def load_data():
     sheet_url = "https://docs.google.com/spreadsheets/d/115rzE-b9GzzM4onP2mbWN6rDohkHqPJo1Ptn1bkm-Z0/export?format=csv"
     data = pd.read_csv(sheet_url)
     
-    # BERSIHKAN NAMA KOLOM (Sangat Penting untuk Header)
+    # Standarisasi kolom ke huruf kecil
     data.columns = [str(c).strip().lower() for c in data.columns]
     
-    # --- PROSES KOLOM TANGGAL ---
+    # --- Penyesuaian Tanggal ---
     if 'tanggal' in data.columns:
         data['tanggal'] = pd.to_datetime(data['tanggal'], errors='coerce')
     
-    # --- PROSES KOLOM CONFIDENCE ---
+    # --- Penyesuaian Confidence (Sistem Anti-Error) ---
     if 'confidence' in data.columns:
+        # Konversi koma ke titik dan pastikan numerik
         data['confidence'] = data['confidence'].astype(str).str.replace(',', '.')
         data['confidence'] = pd.to_numeric(data['confidence'], errors='coerce').fillna(0)
-        data['confidence'] = data['confidence'].apply(lambda x: x/10000 if x > 100 else (x/100 if x > 1 else x))
+        
+        # Normalisasi angka jika terbaca sebagai ribuan (misal 8021 -> 0.8021)
+        data['confidence'] = data['confidence'].apply(
+            lambda x: x / 10000 if x > 100 else (x / 100 if x > 1 else x)
+        )
     
-    # --- PROSES KOLOM GAMBAR (PRATINJAU) ---
+    # --- Penyesuaian Link Foto ---
     if 'link foto' in data.columns:
         base_url = NGROK_URL.strip().rstrip('/')
         data['pratinjau'] = data['link foto'].apply(
@@ -66,43 +69,37 @@ def load_data():
         
     return data
 
+# 5. Dashboard Utama
 try:
     df = load_data()
 
-    # --- Header Dashboard ---
-    st.title("🚧 Dashboard Pelaporan Jalan Rusak")
-    st.write(f"Sistem Deteksi Real-time")
+    st.title("🚧 Dashboard Monitoring Jalan Rusak")
     
-    # --- Row 1: Metrik Utama ---
-    col1, col2, col3, col4 = st.columns(4)
+    # Metrik
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Laporan", f"{len(df)} 📋")
     with col2:
-        # Gunakan nama kolom yang sudah di-lowercase ('jenis kerusakan')
-        unseen_count = 0
-        if 'jenis kerusakan' in df.columns:
-            unseen_count = len(df[df['jenis kerusakan'].isin(['Jalanan Berlumpur', 'Bukan Jalanan'])])
-        st.metric("Deteksi Unseen", f"{unseen_count} ✨")
+        # Menghitung deteksi kelas Unseen secara dinamis
+        unseen_list = ["Jalanan Berlumpur", "Bukan Jalanan"]
+        u_count = len(df[df['jenis kerusakan'].isin(unseen_list)]) if 'jenis kerusakan' in df.columns else 0
+        st.metric("Deteksi Unseen ✨", u_count)
     with col3:
-        top_issue = df['jenis kerusakan'].mode()[0] if not df.empty and 'jenis kerusakan' in df.columns else "N/A"
-        st.metric("Isu Terdominan", top_issue)
-    with col4:
-        st.metric("Status Server", "Aktif ✅")
+        avg_conf = df['confidence'].mean() if 'confidence' in df.columns else 0
+        st.metric("Rerata Akurasi", f"{avg_conf:.2%}")
 
     st.markdown("---")
 
-    # --- Row 2: Tabel dengan Header Terjamin Muncul ---
-    st.subheader("📋 Daftar Riwayat Laporan Lengkap")
+    # Tabel Riwayat
+    st.subheader("📋 Riwayat Deteksi Model Final")
     
-    # Konfigurasi Kolom yang SINKRON dengan nama kolom data
     st.data_editor(
         df,
         column_config={
             "pratinjau": st.column_config.ImageColumn("Foto Kejadian", width="medium"),
-            "jenis kerusakan": st.column_config.TextColumn("Jenis Kerusakan"),
             "confidence": st.column_config.NumberColumn("Confidence", format="%.2f%%"),
             "tanggal": st.column_config.DatetimeColumn("Waktu Laporan"),
-            "link foto": None # Kolom ini disembunyikan
+            "link foto": None # Sembunyikan kolom teks asli
         },
         use_container_width=True,
         hide_index=True,
@@ -110,4 +107,4 @@ try:
     )
 
 except Exception as e:
-    st.error(f"Gagal memuat dashboard. Error: {e}")
+    st.error(f"Gagal memuat dashboard. Periksa koneksi Server atau Google Sheets. Error: {e}")
