@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 # 1. Konfigurasi Utama & Ngrok
 NGROK_URL = "https://ae9d063e3834.ngrok-free.app" 
@@ -45,16 +46,25 @@ def load_data():
     # Standarisasi nama kolom
     data.columns = [c.lower().strip() for c in data.columns]
     
-    # --- PERBAIKAN CONFIDENCE ---
+    # --- PERBAIKAN CONFIDENCE (SISTEM ANTI-NONE) ---
     if 'confidence' in data.columns:
-        # Paksa menjadi angka (mengatasi masalah titik/koma)
-        data['confidence'] = pd.to_numeric(data['confidence'], errors='coerce')
+        # a. Ubah ke string dan ganti koma ke titik (antisipasi standar Indo)
+        data['confidence'] = data['confidence'].astype(str).str.replace(',', '.')
         
-        # Logika normalisasi: Jika angka terbaca ribuan (seperti 8021), bagi agar jadi desimal (0.8021)
-        # Jika angka sudah desimal (0.80), tetap dibiarkan
-        data['confidence'] = data['confidence'].apply(
-            lambda x: x / 10000 if x > 100 else (x / 100 if x > 1 else x)
-        )
+        # b. Bersihkan karakter selain angka dan titik (seperti simbol %)
+        data['confidence'] = data['confidence'].str.replace(r'[^-0-9.]', '', regex=True)
+        
+        # c. Paksa jadi angka, jika gagal ganti jadi 0 (agar tidak None)
+        data['confidence'] = pd.to_numeric(data['confidence'], errors='coerce').fillna(0)
+        
+        # d. Logika normalisasi angka besar
+        def fix_value(x):
+            if x > 1000: return x / 10000 # Contoh: 8021 -> 0.8021
+            if x > 100: return x / 1000   # Contoh: 802 -> 0.802
+            if x > 1: return x / 100      # Contoh: 80 -> 0.80
+            return x
+        
+        data['confidence'] = data['confidence'].apply(fix_value)
     
     # Pembuatan URL Foto
     if 'link foto' in data.columns:
@@ -78,7 +88,7 @@ try:
     with col2:
         if 'jenis kerusakan' in df.columns:
             unseen_count = len(df[df['jenis kerusakan'].isin(['Jalanan Berlumpur', 'Bukan Jalanan'])])
-            st.metric("Deteksi Unseen", f"{unseen_count} ✨", help="Jumlah kelas di luar dataset latih")
+            st.metric("Deteksi Unseen", f"{unseen_count} ✨")
         else:
             st.metric("Deteksi Unseen", "0")
 
@@ -88,9 +98,8 @@ try:
 
     with col4:
         if 'confidence' in df.columns:
-            # Menghitung rata-rata dari angka yang sudah dinormalisasi
             conf_avg = df['confidence'].mean()
-            st.metric("Rerata Confidence", f"{conf_avg:.2%}") # Menampilkan format 80.21%
+            st.metric("Rerata Confidence", f"{conf_avg:.2%}") 
         else:
             st.metric("Status Server", "Aktif ✅")
 
@@ -99,7 +108,7 @@ try:
     # --- Row 2: Tabel Interaktif dengan Gambar ---
     st.subheader("📋 Daftar Riwayat Laporan Lengkap")
     
-    search_query = st.text_input("🔍 Cari berdasarkan lokasi, deskripsi, atau jenis kerusakan:", "")
+    search_query = st.text_input("🔍 Cari berdasarkan lokasi atau jenis kerusakan:", "")
     
     if search_query:
         filtered_df = df[df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)]
@@ -110,10 +119,10 @@ try:
     st.dataframe(
         filtered_df,
         column_config={
-            "pratinjau": st.column_config.ImageColumn("Foto Kejadian", help="Gambar dari folder lokal"),
+            "pratinjau": st.column_config.ImageColumn("Foto Kejadian"),
             "confidence": st.column_config.NumberColumn(
                 "Confidence", 
-                format="%.2f%%", # Mengubah 0.8021 menjadi tampilan 80.21% di tabel
+                format="%.2f%%", 
                 help="Tingkat keyakinan model"
             ),
             "tanggal": st.column_config.DatetimeColumn("Waktu"),
