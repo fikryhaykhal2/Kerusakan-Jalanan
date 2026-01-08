@@ -1,8 +1,12 @@
 fastapi
+uvicorn
 python-multipart
 torch
 torchvision
+torchaudio
 transformers
-pandas
-plotly
 pillow
+pandas
+streamlit
+pyngrok
+nest-asyncio
