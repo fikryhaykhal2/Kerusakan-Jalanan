@@ -40,20 +40,19 @@ with st.sidebar:
 # 4. Fungsi Load Data
 @st.cache_data(ttl=60)
 def load_data():
-    # Menggunakan link CSV export dari Google Sheets Anda
     sheet_url = "https://docs.google.com/spreadsheets/d/115rzE-b9GzzM4onP2mbWN6rDohkHqPJo1Ptn1bkm-Z0/export?format=csv"
     data = pd.read_csv(sheet_url)
     
-    # Standarisasi nama kolom ke huruf kecil
+    # Standarisasi nama kolom
     data.columns = [c.lower().strip() for c in data.columns]
     
-    # LOGIKA PENTING: Membuat URL Gambar dari folder lokal via Ngrok
-    # Jika kolom di Sheets bernama 'Link Foto', setelah di-lower menjadi 'link foto'
+    # Pastikan kolom 'link foto' adalah string agar bisa ditambah dengan URL
     if 'link foto' in data.columns:
-        data['pratinjau'] = data['link foto'].apply(
-            lambda x: f"{NGROK_URL}/static/images/{x}" if pd.notnull(x) and not str(x).startswith('=') else None
+        # .astype(str) mencegah error 'int' + 'str'
+        data['pratinjau'] = data['link foto'].astype(str).apply(
+            lambda x: f"{NGROK_URL}/static/images/{x}" if x != 'nan' and not x.startswith('=') else None
         )
-    return data
+    return data data
 
 try:
     df = load_data()
@@ -110,3 +109,4 @@ try:
 
 except Exception as e:
     st.error(f"Gagal memuat dashboard. Pastikan kolom di Google Sheets sudah sesuai. Error: {e}")
+
