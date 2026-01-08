@@ -1,5 +1,2 @@
 streamlit
 pandas
-torch
-torchvision
-pillow
