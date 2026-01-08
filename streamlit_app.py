@@ -1,21 +1,20 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Konfigurasi Halaman
+# 1. Konfigurasi Utama & Ngrok
+# GANTI URL INI setiap kali Anda menjalankan ulang Ngrok
+NGROK_URL = "https://your-ngrok-url.ngrok-free.app" 
+
 st.set_page_config(
-    page_title="Monitoring Jalan Rusak",
+    page_title="Monitoring Jalan Rusak v2",
     page_icon="🚧",
     layout="wide"
 )
 
-# 2. Custom CSS untuk Tema Gelap & Box Metrik
+# 2. Custom CSS (Tetap menggunakan gaya gelap Anda)
 st.markdown("""
     <style>
-    /* Mengubah latar belakang utama */
-    .main {
-        background-color: #0e1117;
-    }
-    /* Mengubah Box Metrik menjadi Gelap */
+    .main { background-color: #0e1117; }
     div[data-testid="stMetric"] {
         background-color: #1f2937; 
         border: 1px solid #374151;
@@ -23,39 +22,37 @@ st.markdown("""
         border-radius: 12px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
-    /* Warna teks Label Metrik */
-    div[data-testid="stMetricLabel"] {
-        color: #9ca3af !important;
-        font-weight: bold;
-    }
-    /* Warna teks Nilai Metrik */
-    div[data-testid="stMetricValue"] {
-        color: #ffffff !important;
-    }
-    /* Menghilangkan border pada dataframe agar lebih bersih */
-    .stDataFrame {
-        border: none;
-    }
-    h1, h2, h3 {
-        color: #ffffff;
-    }
+    div[data-testid="stMetricLabel"] { color: #9ca3af !important; font-weight: bold; }
+    div[data-testid="stMetricValue"] { color: #ffffff !important; }
+    h1, h2, h3 { color: #ffffff; }
     </style>
     """, unsafe_allow_html=True)
 
 # 3. Sidebar
 with st.sidebar:
     st.title("⚙️ Kontrol Panel")
-    st.info("Sistem Monitoring Terpadu")
+    st.info("Sistem Monitoring Open-Vocabulary")
+    st.markdown(f"**Server Model:** `{NGROK_URL}`")
     if st.button("🔄 Segarkan Data"):
         st.cache_data.clear()
         st.rerun()
 
-# 4. Fungsi Load Data dari Google Sheets
-@st.cache_data
+# 4. Fungsi Load Data
+@st.cache_data(ttl=60)
 def load_data():
+    # Menggunakan link CSV export dari Google Sheets Anda
     sheet_url = "https://docs.google.com/spreadsheets/d/115rzE-b9GzzM4onP2mbWN6rDohkHqPJo1Ptn1bkm-Z0/export?format=csv"
     data = pd.read_csv(sheet_url)
-    data.columns = [c.lower() for c in data.columns]
+    
+    # Standarisasi nama kolom ke huruf kecil
+    data.columns = [c.lower().strip() for c in data.columns]
+    
+    # LOGIKA PENTING: Membuat URL Gambar dari folder lokal via Ngrok
+    # Jika kolom di Sheets bernama 'Link Foto', setelah di-lower menjadi 'link foto'
+    if 'link foto' in data.columns:
+        data['pratinjau'] = data['link foto'].apply(
+            lambda x: f"{NGROK_URL}/static/images/{x}" if pd.notnull(x) and not str(x).startswith('=') else None
+        )
     return data
 
 try:
@@ -63,45 +60,53 @@ try:
 
     # --- Header Section ---
     st.title("🚧 Dashboard Pelaporan Jalan Rusak")
-    st.write("Data laporan masyarakat yang masuk melalui sistem Telegram Bot.")
+    st.write(f"Analisis Citra Jalan Terintegrasi (Device: CLIP-ViT-B/32)")
     
-    # --- Row 1: Metrik Utama (Box Gelap) ---
+    # --- Row 1: Metrik Utama ---
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Laporan", f"{len(df)} 📋")
     with col2:
-        # Contoh filter sederhana untuk laporan hari ini (jika ada data terkait)
-        st.metric("Laporan Baru", "5 🆕", delta="+2 hari ini")
+        # Menghitung deteksi Open-Vocabulary (Unseen)
+        unseen_count = len(df[df['jenis kerusakan'].isin(['Jalanan Berlumpur', 'Bukan Jalanan'])])
+        st.metric("Deteksi Unseen", f"{unseen_count} ✨", help="Jumlah kelas di luar dataset latih")
     with col3:
-        # Menampilkan jenis kerusakan yang paling sering dilaporkan
-        top_issue = df['jenis_kerusakan'].mode()[0] if 'jenis_kerusakan' in df.columns else "N/A"
+        top_issue = df['jenis kerusakan'].mode()[0] if not df.empty else "N/A"
         st.metric("Isu Terdominan", top_issue)
     with col4:
-        st.metric("Status Server", "Aktif ✅")
+        avg_conf = f"{df['confidence'].mean():.2%}" if 'confidence' in df.columns else "0%"
+        st.metric("Rerata Confidence", avg_conf)
 
     st.markdown("---")
 
-    # --- Row 2: Tabel Detail Laporan ---
+    # --- Row 2: Tabel Interaktif dengan Gambar ---
     st.subheader("📋 Daftar Riwayat Laporan Lengkap")
     
-    # Menambahkan fitur pencarian/filter di atas tabel
-    search_query = st.text_input("🔍 Cari berdasarkan lokasi atau jenis kerusakan:", "")
+    search_query = st.text_input("🔍 Cari berdasarkan lokasi, deskripsi, atau jenis kerusakan:", "")
     
     if search_query:
-        # Filter dataframe berdasarkan input pencarian
         filtered_df = df[df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)]
     else:
         filtered_df = df
 
-    # Menampilkan tabel dengan lebar penuh
+    # Menampilkan Tabel dengan Kolom Gambar
     st.dataframe(
-        filtered_df, 
+        filtered_df,
+        column_config={
+            "pratinjau": st.column_config.ImageColumn("Foto Kejadian", help="Gambar dari folder lokal server"),
+            "confidence": st.column_config.NumberColumn("Confidence", format="%.4f"),
+            "tanggal": st.column_config.DatetimeColumn("Waktu"),
+            "link foto": None # Sembunyikan kolom nama file mentah agar rapi
+        },
         use_container_width=True,
-        hide_index=True # Menyembunyikan kolom index agar lebih rapi
+        hide_index=True
     )
 
-    # Informasi tambahan di footer
-    st.caption(f"Menampilkan {len(filtered_df)} dari total {len(df)} laporan.")
+    # --- Row 3: Grafik ---
+    st.subheader("📊 Statistik Jenis Kerusakan")
+    if not filtered_df.empty:
+        chart_data = filtered_df['jenis kerusakan'].value_counts()
+        st.bar_chart(chart_data)
 
 except Exception as e:
-    st.error(f"Gagal memuat dashboard: {e}")
+    st.error(f"Gagal memuat dashboard. Pastikan kolom di Google Sheets sudah sesuai. Error: {e}")
