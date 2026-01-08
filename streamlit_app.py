@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 
 # 1. Konfigurasi Utama & Ngrok
-# Pastikan URL ini TIDAK diakhiri dengan garis miring (/)
 NGROK_URL = "https://ae9d063e3834.ngrok-free.app" 
 
 st.set_page_config(
@@ -34,10 +33,7 @@ with st.sidebar:
     st.title("⚙️ Kontrol Panel")
     st.info("Sistem Monitoring Open-Vocabulary")
     st.markdown(f"**Server Model:** `{NGROK_URL}`")
-    
-    # Tips jika gambar tidak muncul
     st.warning("⚠️ Jika gambar tidak muncul, buka URL Server Model di tab baru dan klik 'Visit Site'.")
-    
     if st.button("🔄 Segarkan Data"):
         st.cache_data.clear()
         st.rerun()
@@ -50,6 +46,11 @@ def load_data():
     
     # Standarisasi nama kolom
     data.columns = [c.lower().strip() for c in data.columns]
+    
+    # --- PERBAIKAN TIPE DATA TANGGAL (SOLUSI ERROR) ---
+    if 'tanggal' in data.columns:
+        # Mengonversi string ke datetime agar cocok dengan st.column_config.DatetimeColumn
+        data['tanggal'] = pd.to_datetime(data['tanggal'], errors='coerce')
     
     # --- PERBAIKAN CONFIDENCE ---
     if 'confidence' in data.columns:
@@ -64,16 +65,14 @@ def load_data():
             return x
         data['confidence'] = data['confidence'].apply(fix_value)
     
-    # --- PERBAIKAN URL FOTO (SISTEM STABIL) ---
+    # --- PERBAIKAN URL FOTO ---
     if 'link foto' in data.columns:
         base_url = NGROK_URL.strip().rstrip('/')
-        
         def build_url(filename):
             name = str(filename).strip()
             if name.lower() in ['nan', 'none', ''] or name.startswith('='):
                 return None
             return f"{base_url}/static/images/{name}"
-            
         data['pratinjau'] = data['link foto'].apply(build_url)
         
     return data
@@ -98,7 +97,7 @@ try:
 
     st.markdown("---")
 
-    # --- Row 2: Tabel Interaktif (Menggunakan Data Editor untuk Gambar lebih Stabil) ---
+    # --- Row 2: Tabel Interaktif ---
     st.subheader("📋 Daftar Riwayat Laporan Lengkap")
     search_query = st.text_input("🔍 Cari berdasarkan lokasi atau jenis kerusakan:", "")
     
@@ -106,22 +105,21 @@ try:
     if search_query:
         filtered_df = df[df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)]
 
-    # Menggunakan st.data_editor karena seringkali lebih baik dalam merender ImageColumn
+    # Menggunakan st.data_editor dengan kolom yang sudah dikonversi
     st.data_editor(
         filtered_df,
         column_config={
             "pratinjau": st.column_config.ImageColumn(
                 "Foto Kejadian", 
-                help="Pratinjau foto dari lokasi",
                 width="medium"
             ),
             "confidence": st.column_config.NumberColumn("Confidence", format="%.2f%%"),
-            "tanggal": st.column_config.DatetimeColumn("Waktu"),
-            "link foto": None # Sembunyikan nama file mentah
+            "tanggal": st.column_config.DatetimeColumn("Waktu Laporan"),
+            "link foto": None 
         },
         use_container_width=True,
         hide_index=True,
-        disabled=True # Agar user tidak bisa mengedit data
+        disabled=True 
     )
 
     # --- Row 3: Grafik ---
