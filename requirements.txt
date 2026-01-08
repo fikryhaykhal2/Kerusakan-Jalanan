@@ -1,5 +1,8 @@
+fastapi
+python-multipart
 torch
 torchvision
+transformers
 pandas
 plotly
 pillow
