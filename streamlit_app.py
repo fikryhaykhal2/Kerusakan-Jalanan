@@ -3,7 +3,7 @@ import pandas as pd
 
 # 1. Konfigurasi Utama & Ngrok
 # GANTI URL INI setiap kali Anda menjalankan ulang Ngrok
-NGROK_URL = "https://your-ngrok-url.ngrok-free.app" 
+NGROK_URL = "https://ae9d063e3834.ngrok-free.app" 
 
 st.set_page_config(
     page_title="Monitoring Jalan Rusak v2",
@@ -121,3 +121,4 @@ try:
 
 except Exception as e:
     st.error(f"Gagal memuat dashboard. Periksa koneksi atau format Google Sheets. Error: {e}")
+
