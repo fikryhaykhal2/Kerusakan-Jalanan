@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 2. Custom CSS (Tetap menggunakan gaya gelap Anda)
+# 2. Custom CSS (Gaya Gelap)
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -43,16 +43,16 @@ def load_data():
     sheet_url = "https://docs.google.com/spreadsheets/d/115rzE-b9GzzM4onP2mbWN6rDohkHqPJo1Ptn1bkm-Z0/export?format=csv"
     data = pd.read_csv(sheet_url)
     
-    # Standarisasi nama kolom
+    # Standarisasi nama kolom (Lowercase & Buang spasi)
     data.columns = [c.lower().strip() for c in data.columns]
     
-    # Pastikan kolom 'link foto' adalah string agar bisa ditambah dengan URL
+    # Logika pembuatan URL Foto (Penyelesaian error int + str)
     if 'link foto' in data.columns:
-        # .astype(str) mencegah error 'int' + 'str'
+        # Mengonversi seluruh kolom ke string dan menangani NaN
         data['pratinjau'] = data['link foto'].astype(str).apply(
-            lambda x: f"{NGROK_URL}/static/images/{x}" if x != 'nan' and not x.startswith('=') else None
+            lambda x: f"{NGROK_URL}/static/images/{x}" if x not in ['nan', 'None', ''] and not x.startswith('=') else None
         )
-    return data data
+    return data # <-- Sudah diperbaiki dari 'return data data'
 
 try:
     df = load_data()
@@ -65,16 +65,27 @@ try:
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Laporan", f"{len(df)} 📋")
+    
     with col2:
         # Menghitung deteksi Open-Vocabulary (Unseen)
-        unseen_count = len(df[df['jenis kerusakan'].isin(['Jalanan Berlumpur', 'Bukan Jalanan'])])
-        st.metric("Deteksi Unseen", f"{unseen_count} ✨", help="Jumlah kelas di luar dataset latih")
+        # Menggunakan .get() agar aman jika kolom tidak ditemukan
+        if 'jenis kerusakan' in df.columns:
+            unseen_count = len(df[df['jenis kerusakan'].isin(['Jalanan Berlumpur', 'Bukan Jalanan'])])
+            st.metric("Deteksi Unseen", f"{unseen_count} ✨", help="Jumlah kelas di luar dataset latih")
+        else:
+            st.metric("Deteksi Unseen", "0")
+
     with col3:
-        top_issue = df['jenis kerusakan'].mode()[0] if not df.empty else "N/A"
+        top_issue = df['jenis kerusakan'].mode()[0] if not df.empty and 'jenis kerusakan' in df.columns else "N/A"
         st.metric("Isu Terdominan", top_issue)
+
     with col4:
-        avg_conf = f"{df['confidence'].mean():.2%}" if 'confidence' in df.columns else "0%"
-        st.metric("Rerata Confidence", avg_conf)
+        # Pastikan kolom confidence adalah numerik sebelum di-mean
+        if 'confidence' in df.columns:
+            conf_val = pd.to_numeric(df['confidence'], errors='coerce').mean()
+            st.metric("Rerata Confidence", f"{conf_val:.2%}")
+        else:
+            st.metric("Status Server", "Aktif ✅")
 
     st.markdown("---")
 
@@ -84,6 +95,7 @@ try:
     search_query = st.text_input("🔍 Cari berdasarkan lokasi, deskripsi, atau jenis kerusakan:", "")
     
     if search_query:
+        # Pastikan data dikonversi ke string sebelum difilter search
         filtered_df = df[df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)]
     else:
         filtered_df = df
@@ -95,18 +107,17 @@ try:
             "pratinjau": st.column_config.ImageColumn("Foto Kejadian", help="Gambar dari folder lokal server"),
             "confidence": st.column_config.NumberColumn("Confidence", format="%.4f"),
             "tanggal": st.column_config.DatetimeColumn("Waktu"),
-            "link foto": None # Sembunyikan kolom nama file mentah agar rapi
+            "link foto": None # Sembunyikan kolom nama file mentah
         },
         use_container_width=True,
         hide_index=True
     )
 
     # --- Row 3: Grafik ---
-    st.subheader("📊 Statistik Jenis Kerusakan")
-    if not filtered_df.empty:
+    if not filtered_df.empty and 'jenis kerusakan' in filtered_df.columns:
+        st.subheader("📊 Statistik Jenis Kerusakan")
         chart_data = filtered_df['jenis kerusakan'].value_counts()
         st.bar_chart(chart_data)
 
 except Exception as e:
-    st.error(f"Gagal memuat dashboard. Pastikan kolom di Google Sheets sudah sesuai. Error: {e}")
-
+    st.error(f"Gagal memuat dashboard. Periksa koneksi atau format Google Sheets. Error: {e}")
