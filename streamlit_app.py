@@ -8,7 +8,7 @@ st.write("Data real-time dari laporan masyarakat melalui Telegram Bot.")
 
 # Link Google Sheets Anda (Pastikan sudah di-share: Anyone with the link can view)
 # Ganti part '/edit#gid=0' menjadi '/export?format=csv'
-sheet_url = "https://docs.google.com/spreadsheets/d/115rzE-b9GzzM4onP2mbWN6rDohkHqPJo1Ptn1bkm-Z0/edit?usp=sharing"
+sheet_url = "https://docs.google.com/spreadsheets/d/115rzE-b9GzzM4onP2mbWN6rDohkHqPJo1Ptn1bkm-Z0/export?format=csv"
 
 try:
     # Membaca Data
@@ -35,4 +35,5 @@ try:
 
 except Exception as e:
     st.error(f"Gagal memuat data: {e}")
+
     st.info("Pastikan Google Sheets Anda sudah diatur ke 'Anyone with the link can view'")
