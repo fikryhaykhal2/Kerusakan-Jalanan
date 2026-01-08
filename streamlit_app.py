@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 
 # 1. Konfigurasi Utama & Ngrok
-# GANTI URL INI setiap kali Anda menjalankan ulang Ngrok
 NGROK_URL = "https://ae9d063e3834.ngrok-free.app" 
 
 st.set_page_config(
@@ -11,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 2. Custom CSS (Gaya Gelap)
+# 2. Custom CSS
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -43,16 +42,26 @@ def load_data():
     sheet_url = "https://docs.google.com/spreadsheets/d/115rzE-b9GzzM4onP2mbWN6rDohkHqPJo1Ptn1bkm-Z0/export?format=csv"
     data = pd.read_csv(sheet_url)
     
-    # Standarisasi nama kolom (Lowercase & Buang spasi)
+    # Standarisasi nama kolom
     data.columns = [c.lower().strip() for c in data.columns]
     
-    # Logika pembuatan URL Foto (Penyelesaian error int + str)
+    # --- PERBAIKAN CONFIDENCE ---
+    if 'confidence' in data.columns:
+        # Paksa menjadi angka (mengatasi masalah titik/koma)
+        data['confidence'] = pd.to_numeric(data['confidence'], errors='coerce')
+        
+        # Logika normalisasi: Jika angka terbaca ribuan (seperti 8021), bagi agar jadi desimal (0.8021)
+        # Jika angka sudah desimal (0.80), tetap dibiarkan
+        data['confidence'] = data['confidence'].apply(
+            lambda x: x / 10000 if x > 100 else (x / 100 if x > 1 else x)
+        )
+    
+    # Pembuatan URL Foto
     if 'link foto' in data.columns:
-        # Mengonversi seluruh kolom ke string dan menangani NaN
         data['pratinjau'] = data['link foto'].astype(str).apply(
             lambda x: f"{NGROK_URL}/static/images/{x}" if x not in ['nan', 'None', ''] and not x.startswith('=') else None
         )
-    return data # <-- Sudah diperbaiki dari 'return data data'
+    return data
 
 try:
     df = load_data()
@@ -67,8 +76,6 @@ try:
         st.metric("Total Laporan", f"{len(df)} 📋")
     
     with col2:
-        # Menghitung deteksi Open-Vocabulary (Unseen)
-        # Menggunakan .get() agar aman jika kolom tidak ditemukan
         if 'jenis kerusakan' in df.columns:
             unseen_count = len(df[df['jenis kerusakan'].isin(['Jalanan Berlumpur', 'Bukan Jalanan'])])
             st.metric("Deteksi Unseen", f"{unseen_count} ✨", help="Jumlah kelas di luar dataset latih")
@@ -80,10 +87,10 @@ try:
         st.metric("Isu Terdominan", top_issue)
 
     with col4:
-        # Pastikan kolom confidence adalah numerik sebelum di-mean
         if 'confidence' in df.columns:
-            conf_val = pd.to_numeric(df['confidence'], errors='coerce').mean()
-            st.metric("Rerata Confidence", f"{conf_val:.2%}")
+            # Menghitung rata-rata dari angka yang sudah dinormalisasi
+            conf_avg = df['confidence'].mean()
+            st.metric("Rerata Confidence", f"{conf_avg:.2%}") # Menampilkan format 80.21%
         else:
             st.metric("Status Server", "Aktif ✅")
 
@@ -95,19 +102,22 @@ try:
     search_query = st.text_input("🔍 Cari berdasarkan lokasi, deskripsi, atau jenis kerusakan:", "")
     
     if search_query:
-        # Pastikan data dikonversi ke string sebelum difilter search
         filtered_df = df[df.astype(str).apply(lambda x: x.str.contains(search_query, case=False)).any(axis=1)]
     else:
         filtered_df = df
 
-    # Menampilkan Tabel dengan Kolom Gambar
+    # Menampilkan Tabel
     st.dataframe(
         filtered_df,
         column_config={
-            "pratinjau": st.column_config.ImageColumn("Foto Kejadian", help="Gambar dari folder lokal server"),
-            "confidence": st.column_config.NumberColumn("Confidence", format="%.4f"),
+            "pratinjau": st.column_config.ImageColumn("Foto Kejadian", help="Gambar dari folder lokal"),
+            "confidence": st.column_config.NumberColumn(
+                "Confidence", 
+                format="%.2f%%", # Mengubah 0.8021 menjadi tampilan 80.21% di tabel
+                help="Tingkat keyakinan model"
+            ),
             "tanggal": st.column_config.DatetimeColumn("Waktu"),
-            "link foto": None # Sembunyikan kolom nama file mentah
+            "link foto": None 
         },
         use_container_width=True,
         hide_index=True
@@ -120,5 +130,4 @@ try:
         st.bar_chart(chart_data)
 
 except Exception as e:
-    st.error(f"Gagal memuat dashboard. Periksa koneksi atau format Google Sheets. Error: {e}")
-
+    st.error(f"Gagal memuat dashboard. Error: {e}")
