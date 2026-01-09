@@ -4,7 +4,7 @@ import numpy as np
 
 # 1. Konfigurasi Utama
 # GANTI URL INI sesuai URL Ngrok terbaru Anda
-NGROK_URL = "hhttps://4d9ba8690bb9.ngrok-free.app" 
+NGROK_URL = "https://1c0c49ee3841.ngrok-free.app" 
 
 st.set_page_config(
     page_title="Monitoring Jalan Rusak Final",
@@ -108,3 +108,4 @@ try:
 
 except Exception as e:
     st.error(f"Gagal memuat dashboard. Periksa koneksi Server atau Google Sheets. Error: {e}")
+
